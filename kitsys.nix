@@ -109,32 +109,35 @@ let
     );
   };
 
-in lib.fix (kitsys: {
-  newKit = kitDef: lib.fix (self: kitDef { inherit self kitsys; });
-
-  defineEval = {
-    # The current kit definition, can be used to access extra fields
-    self,
-    # Module class
+in {
+  # Build a kit from a plain definition attrset, and return that kit.
+  # The returned kit carries back `meta`, and derives `eval` from the definition.
+  newKit = {
+    # Arbitrary metadata about the kit, such as `meta.name`.
+    meta ? {},
+    # The modules every evaluation of the kit starts from, declaring the kit's own options.
+    baseModules ? [],
+    # Module class passed to `evalModules`.
     class ? null,
-    # Extra arguments passed to specialArgs.
+    # Extra module args, merged over the injected `pkgs`.
     extraSpecialArgs ? {},
 
-    # Set to `false` if `lib` option is already defined in `self.baseModules` to avoid conflicting
+    # Set to `false` if `lib` option is already defined in `baseModules` to avoid conflicting
     # definitions.
     declareLibOption ? true,
 
-    # Set to `false` if `assertions`/`warnings` options are already defined in `self.baseModules` to
+    # Set to `false` if `assertions`/`warnings` options are already defined in `baseModules` to
     # avoid conflicting definitions.
     declareAssertWarnOptions ? true,
-  }: (
-    let
-      kitsysBaseModules = [
-        (if declareLibOption then declareLibOptionModule else {})
-        (if declareAssertWarnOptions then declareAssertWarnOptionsModule else {})
-        declareConfigExtensionHelperModule
-      ];
-    in {
+  }:
+  let
+    kitsysBaseModules = [
+      (if declareLibOption then declareLibOptionModule else {})
+      (if declareAssertWarnOptions then declareAssertWarnOptionsModule else {})
+      declareConfigExtensionHelperModule
+    ];
+
+    eval = {
       pkgs,
       lib ? pkgs.lib,
       config,
@@ -149,7 +152,7 @@ in lib.fix (kitsys: {
         specialArgs = { inherit pkgs; } // extraSpecialArgs;
         modules = (
           kitsysBaseModules
-          ++ self.baseModules
+          ++ baseModules
           ++ [ config configOverride ]
           ++ moreModules
           ++ [
@@ -159,6 +162,8 @@ in lib.fix (kitsys: {
           ]
         );
       };
-    in checkAssertsAndWarnings evaluated.config
-  );
-})
+    in checkAssertsAndWarnings evaluated.config;
+  in {
+    inherit meta eval;
+  };
+}

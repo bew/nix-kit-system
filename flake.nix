@@ -1,10 +1,7 @@
 {
-  description = "kit-system — the nested config module system (kitsys)";
+  inputs.nixlib.url = "github:nix-community/nixpkgs.lib";
 
-  outputs = { self }: {
-    # kitsys takes the caller's `lib` (so option types and priorities come from the
-    # consuming module system's nixpkgs) and returns the kitsys attrset with
-    # `newKit` / `defineEval`.
-    lib.kitsys = import ./kitsys.nix;
+  outputs = { self, nixlib }: {
+    lib.kitsys = import ./kitsys.nix { inherit (nixlib) lib; };
   };
 }
