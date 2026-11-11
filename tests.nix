@@ -2,7 +2,7 @@ let
   pkgs = builtins.getFlake "pkgs";
   lib = pkgs.lib;
 
-  kitsys = import ./. { inherit lib; };
+  kitsys = import ./kitsys.nix { inherit lib; };
 
   minikit = kitsys.newKit (import ./test-kit/kit.nix);
 
