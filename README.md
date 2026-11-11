@@ -227,6 +227,7 @@ The flake exposes a single function: `lib.kitsys.newKit`.
 | `meta` | `{}` | Arbitrary metadata about the kit, such as `meta.name`. |
 | `class` | required | Nominal module class passed to `evalModules`; a module declaring a different `_class` is rejected. |
 | `baseModules` | required | Modules each evaluation starts from, declaring the kit's own options. |
+| `lib` | `null` | Kit-wide default `lib` for `eval`; a `lib` passed to `eval` takes priority. |
 | `declareLibOption` | `true` | Set `false` if `baseModules` declare `lib`. |
 | `declareAssertWarnOptions` | `true` | Set `false` if `baseModules` declare these options. |
 
@@ -241,7 +242,7 @@ The flake exposes a single function: `lib.kitsys.newKit`.
 
 | Arg | Default | Description |
 | --- | --- | --- |
-| `lib` | required | The `lib` the evaluation runs with; also what config modules see as the module-arg `lib`. |
+| `lib` | `newKit`'s `lib` | The `lib` the evaluation runs with (its `evalModules`, assertion/warning check, and option-default helpers). A value passed here takes priority over `newKit`'s `lib`. Required when `newKit` got no `lib`. |
 | `configModule` | required | The module holding the option values to evaluate. |
 | `moreModules` | `[]` | Further modules appended after `configModule`. |
 

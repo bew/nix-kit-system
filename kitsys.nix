@@ -107,6 +107,10 @@ in {
     # The modules every evaluation of the kit starts from, declaring the kit's own options.
     baseModules,
 
+    # Module-system lib used for the evaluation, as a kit-wide default.
+    # A `lib` passed to `eval` takes priority over this one.
+    lib ? null,
+
     # Set to `false` if `lib` option is already defined in `baseModules` to avoid conflicting
     # definitions.
     declareLibOption ? true,
@@ -116,6 +120,16 @@ in {
     declareAssertWarnOptions ? true,
   }:
   let
+    kitLib = lib; # Captured before `eval`'s own `lib` arg shadows it
+    # The `lib` given to `eval` wins; fall back to the kit-wide `lib`, or fail if neither is set.
+    effectiveLib = evalLib: (
+      if evalLib != null
+      then evalLib
+      else if kitLib != null
+      then kitLib
+      else throw "kitsys.eval: no `lib` given; pass it to `newKit` or to `eval`"
+    );
+
     kitsysBaseModules = [
       (if declareLibOption then declareLibOptionModule else {})
       (if declareAssertWarnOptions then declareAssertWarnOptionsModule else {})
@@ -124,7 +138,8 @@ in {
 
     eval = {
       # Module-system lib used for the evaluation.
-      lib,
+      # Defaults to the `lib` given to `newKit`, required if `newKit`'s lib is `null`.
+      lib ? null,
       # The caller's module: the option values to evaluate.
       configModule,
       # Further modules appended after `configModule`.
@@ -132,6 +147,12 @@ in {
       ...
     }@evalArgs:
     let
+      evalLib = evalArgs.lib or null; # Captured & renamed for readability
+      # note: `@evalArgs` holds only the args actually passed, so `or null` covers the omitted case.
+
+      # Shadow 'lib' with the actual effective lib
+      lib = effectiveLib evalLib;
+
       # Everything else the caller passes goes straight to `evalModules`, which rejects
       # arguments it does not know.
       evalArgsExtra = builtins.removeAttrs evalArgs [ "configModule" "moreModules" "lib" ];

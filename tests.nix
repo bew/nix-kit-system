@@ -6,6 +6,28 @@ let
 
   minikit = kitsys.newKit (import ./mini-test-kit/kit.nix);
 
+  # `lib` variants tagging the evals they drive, so tests can tell which lib was used.
+  # (`evalModules` has no `lib` arg: a module's `lib` comes from the lib's own `modules.nix`,
+  #  so tagging happens through a wrapper on `evalModules`.)
+  tagLib = tag: lib // {
+    evalModules = args: lib.evalModules (args // {
+      modules = args.modules ++ [ { _module.args.libTag = tag; } ];
+    });
+  };
+
+  minikitWithLib = kitsys.newKit ((import ./mini-test-kit/kit.nix) // {
+    lib = tagLib "newKit";
+  });
+
+  configLibFromNewKit = minikitWithLib.eval {
+    configModule = { libTag, ... }: { val = libTag; };
+  };
+
+  configLibFromEval = minikitWithLib.eval {
+    lib = tagLib "eval";
+    configModule = { libTag, ... }: { val = libTag; };
+  };
+
   configInit = minikit.eval {
     inherit lib;
     configModule = {
@@ -28,6 +50,7 @@ let
 
   evals = {
     inherit configInit configNested configNestedAgain configWithWarn;
+    inherit configLibFromNewKit configLibFromEval;
   };
 
   # NOTE: Test names _must_ start with `test` to be considered by `runTests`.
@@ -69,6 +92,14 @@ let
       expected = 8;
     };
     # Other tests
+    "test.7lib-from-newkit" = {
+      expr = configLibFromNewKit.val;
+      expected = "newKit";
+    };
+    "test.8lib-from-eval-wins" = {
+      expr = configLibFromEval.val;
+      expected = "eval";
+    };
     "test.with-warning" = {
       expr = configWithWarn.warnings;
       # note: extensions are put before for list merges
