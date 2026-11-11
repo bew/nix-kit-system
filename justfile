@@ -3,4 +3,4 @@ _default:
 
 # Run the test suite
 test:
-	nix eval -f tests.nix
+	nix eval -f unit-tests/runner.nix
