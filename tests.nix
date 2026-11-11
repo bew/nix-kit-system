@@ -1,12 +1,13 @@
 let
-  pkgs = builtins.getFlake "pkgs";
-  lib = pkgs.lib;
+  # Unpinned fetch of nixpkgs' lib: the tests only need a recent `lib` (and `runTests`).
+  lib = (builtins.getFlake "github:nix-community/nixpkgs.lib").lib;
 
-  kitsys = import ./kitsys.nix { kitsysLib = lib; };
+  kitsys = import ./kitsys.nix;
 
   minikit = kitsys.newKit (import ./test-kit/kit.nix);
 
   configInit = minikit.eval {
+    inherit lib;
     configModule = {
       val = "first-value";
     };
@@ -75,7 +76,7 @@ let
     };
   };
   nicer_testResults = let
-    testResults = pkgs.lib.runTests tests;
+    testResults = lib.runTests tests;
     fmtTestNames = lib.concatStringsSep ", " (builtins.attrNames tests);
   in (
     if testResults == []

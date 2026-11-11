@@ -1,22 +1,9 @@
-{ kitsysLib }:
-
 let
-  # Impl copied from the very recent `lib.asserts.checkAssertWarn` (@2025-05)
-  checkAssertWarn = with kitsysLib;
-    assertions: warnings: val:
-    let
-      failedAssertions = map (x: x.message) (filter (x: !x.assertion) assertions);
-    in
-    if failedAssertions != [ ] then
-      throw "\nFailed assertions:\n${concatStringsSep "\n" (map (x: "- ${x}") failedAssertions)}"
-    else
-      showWarnings warnings val;
-
-  checkAssertsAndWarnings = config: (
+  checkAssertsAndWarnings = lib: config: (
     # Check assertions & warnings: (returns the evaluated config if all good)
     # - show all warnings
     # - fail with messages for all false asserts
-    checkAssertWarn
+    lib.asserts.checkAssertWarn
       config.assertions
       config.warnings
       config
@@ -105,7 +92,7 @@ let
             }
           ];
         };
-      in checkAssertsAndWarnings evaluated.config
+      in checkAssertsAndWarnings lib evaluated.config
     );
   };
 
@@ -115,12 +102,10 @@ in {
   newKit = {
     # Arbitrary metadata about the kit, such as `meta.name`.
     meta ? {},
-    # The modules every evaluation of the kit starts from, declaring the kit's own options.
-    baseModules ? [],
     # Module class passed to `evalModules`.
-    class ? null,
-    # Module args passed to every evaluation of the kit.
-    specialArgs ? {},
+    class,
+    # The modules every evaluation of the kit starts from, declaring the kit's own options.
+    baseModules,
 
     # Set to `false` if `lib` option is already defined in `baseModules` to avoid conflicting
     # definitions.
@@ -138,18 +123,21 @@ in {
     ];
 
     eval = {
+      # Module-system lib used for the evaluation.
+      lib,
       # The caller's module: the option values to evaluate.
       configModule,
       # Further modules appended after `configModule`.
       moreModules ? [],
-      # Module-system lib used for the evaluation.
-      # (defaults to the lib kitsys is built with)
-      lib ? kitsysLib,
       ...
-    }:
+    }@evalArgs:
     let
-      evaluated = lib.evalModules {
-        inherit class specialArgs;
+      # Everything else the caller passes goes straight to `evalModules`, which rejects
+      # arguments it does not know.
+      evalArgsExtra = builtins.removeAttrs evalArgs [ "configModule" "moreModules" "lib" ];
+
+      evaluated = lib.evalModules (evalArgsExtra // {
+        inherit class;
         modules = (
           kitsysBaseModules
           ++ baseModules
@@ -161,8 +149,8 @@ in {
             { _kitState.currentEval = lib.mkOptionDefault evaluated; }
           ]
         );
-      };
-    in checkAssertsAndWarnings evaluated.config;
+      });
+    in checkAssertsAndWarnings lib evaluated.config;
   in {
     inherit meta eval;
   };
