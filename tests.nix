@@ -4,7 +4,7 @@ let
 
   kitsys = import ./kitsys.nix;
 
-  minikit = kitsys.newKit (import ./test-kit/kit.nix);
+  minikit = kitsys.newKit (import ./mini-test-kit/kit.nix);
 
   configInit = minikit.eval {
     inherit lib;
