@@ -2,13 +2,12 @@ let
   pkgs = builtins.getFlake "pkgs";
   lib = pkgs.lib;
 
-  kitsys = import ./kitsys.nix { inherit lib; };
+  kitsys = import ./kitsys.nix { kitsysLib = lib; };
 
   minikit = kitsys.newKit (import ./test-kit/kit.nix);
 
   configInit = minikit.eval {
-    inherit pkgs;
-    config = {
+    configModule = {
       val = "first-value";
     };
   };

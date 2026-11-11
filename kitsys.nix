@@ -1,8 +1,8 @@
-{ lib }:
+{ kitsysLib }:
 
 let
   # Impl copied from the very recent `lib.asserts.checkAssertWarn` (@2025-05)
-  checkAssertWarn = with lib;
+  checkAssertWarn = with kitsysLib;
     assertions: warnings: val:
     let
       failedAssertions = map (x: x.message) (filter (x: !x.assertion) assertions);
@@ -119,8 +119,8 @@ in {
     baseModules ? [],
     # Module class passed to `evalModules`.
     class ? null,
-    # Extra module args, merged over the injected `pkgs`.
-    extraSpecialArgs ? {},
+    # Module args passed to every evaluation of the kit.
+    specialArgs ? {},
 
     # Set to `false` if `lib` option is already defined in `baseModules` to avoid conflicting
     # definitions.
@@ -138,22 +138,22 @@ in {
     ];
 
     eval = {
-      pkgs,
-      lib ? pkgs.lib,
-      config,
-      # FIXME: configOverride still useful since we have lib.extendWith?
-      configOverride ? {},
+      # The caller's module: the option values to evaluate.
+      configModule,
+      # Further modules appended after `configModule`.
       moreModules ? [],
+      # Module-system lib used for the evaluation.
+      # (defaults to the lib kitsys is built with)
+      lib ? kitsysLib,
       ...
     }:
     let
       evaluated = lib.evalModules {
-        inherit class;
-        specialArgs = { inherit pkgs; } // extraSpecialArgs;
+        inherit class specialArgs;
         modules = (
           kitsysBaseModules
           ++ baseModules
-          ++ [ config configOverride ]
+          ++ [ configModule ]
           ++ moreModules
           ++ [
             # Initialize the state with the current eval, using option-default priority to ensure
