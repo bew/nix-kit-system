@@ -6,6 +6,9 @@ This flake exposes `kitsys`, a small Nix library that turns `lib.evalModules` in
 
 > [!NOTE]
 > This flake was extracted from my [dotfiles](https://github.com/bew/dotfiles) repo, where it backs my _toolkit_ module systems for nvim, zsh, tmux, …
+>
+> The core was written by hand, over a long period of design & thinking.
+> The extraction as a flake, and the API rework since then, were AI-assisted.
 
 ## Motivation
 
