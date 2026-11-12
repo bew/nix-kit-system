@@ -15,7 +15,8 @@ This flake exposes `kitsys`, a small Nix library that turns `lib.evalModules` in
 The **Kit** system was driven by these goals:
 - **A solid base for many module systems**: every use-case (NixOS, NixVim, a zsh toolkit, …) needs the same scaffolding — an eval entry point, a `lib` option, assertions and warnings.
   `kitsys` supplies that scaffolding, so a kit only declares what is specific to it.
-- **Extension after evaluation** (also called _refinement_): a **Kit Config** carries `lib.extendWith`, which re-evaluates the same kit with an extra module and returns a new config.
+- **A standard way to create & share module systems**: a kit is a named, class-constrained module system with a stable eval entry point, so a module system defined once can be exposed as a flake output (`kits.<name>`) and consumed by other flakes.
+- **Easy way to extend/refine a config after evaluation**: a **Kit Config** carries `extendWith`, which re-evaluates the same kit with an extra module and returns a new config.
   These extensions can chain, and the extra module can read the config values from before the extension through the `prevConfig` module arg.
 
 ## Concepts
@@ -27,6 +28,10 @@ A **Kit Config** is the result of evaluating a **Kit**: it holds the resolved op
 
 A **Kit module** is a [_Nix module_][nix-module-system] written for a **Kit**.
 
+A **Kit** should stay system-agnostic: its definition must not depend on any particular system, so the same kit instance can be shared everywhere it is exposed.
+Anything system-specific — typically `pkgs` — belongs to an evaluation: pass it to `eval` as `pkgs`, never bake it into the kit's `baseModules`.
+`eval`'s `pkgs` also provides `lib` (as `pkgs.lib`) when no other `lib` is set.
+
 ## Quick start
 
 Add the flake as an input:
@@ -37,33 +42,34 @@ inputs.kit-system.url = "github:bew/nix-kit-system";
 
 Defining a **Kit** and evaluating a **Kit module** for that **Kit** are separate steps.
 
-The snippets below assume `kitsys = inputs.kit-system.lib.kitsys`.
+The snippets below assume `kitsys = inputs.kit-system.lib.kitsys`, and that `pkgs` is the `pkgs` of the system being evaluated.
 
 **1. Define a kit**:
 ```nix
 mykit = kitsys.newKit {
   meta.name = "My kit for simple greetings";
   class = "mykit";
-  baseModules = [
-    ./base.mykit-module.nix
-    { _module.args.pkgs = pkgs; } # (if needed for your kit)
-  ];
+  baseModules = [ ./base.mykit-module.nix ];
 };
 ```
 
 **2. Evaluate a module for a kit**:
 ```nix
 myConfig = mykit.eval {
-  lib = inputs.nixpkgs.lib;
+  pkgs = pkgs; # system-specific inputs belong here, at eval time (`lib` then defaults to `pkgs.lib`)
+  # or if the kit doesn't need `pkgs`, pass `lib` directly:
+  # lib = inputs.nixpkgs.lib;
+
   configModule = ./path/to/your/bew-config.mykit-module.nix;
   # or in attrset form:
   # configModule = { /* your option values */ };
+
 };
 ```
 
 **3. Extend an evaluated kit config** when needed:
 ```nix
-myCustomConfig = myConfig.lib.extendWith ({ lib, prevConfig, ... }: {
+myCustomConfig = myConfig.extendWith ({ lib, prevConfig, ... }: {
   /* override or add options; `prevConfig` holds the config values from before _this_ extension */
 });
 ```
@@ -73,6 +79,9 @@ myCustomConfig = myConfig.lib.extendWith ({ lib, prevConfig, ... }: {
 A flake that defines a **Kit**, or evaluates a **Kit Config**, can expose them for other flakes to consume:
 - `kits.<name>` — a built **Kit**, ready to `eval`.
 - `kitConfigs.<name>` — an evaluated **Kit Config**, ready to use.
+
+A **Kit** being system-agnostic means it is exposed once, not under `forAllSystems`.
+Only the **Kit Config**s that need `pkgs` are per-system, since it is their `eval` call that supplies it.
 
 ```nix
 {
@@ -202,9 +211,49 @@ Example _module_:
 }
 ```
 
+## Defining complex **Kit**s
+
+A kit may need more than the default `lib.evalModules` setup, and `newKit` args cover that:
+- `customEval` replaces the `evalModules` call each `eval` runs — e.g. to reuse home-manager's module system.
+- `exportedToplevelFields` adds extra top-level fields to each **Kit Config**, derived from the evaluated config.
+
+The [`examples/`](examples/) directory holds a complete home-manager-based kit, across [`examples/homekit.nix`](examples/homekit.nix) and its [`examples/flake.nix`](examples/flake.nix):
+
+```nix
+kitsys.newKit {
+  class = "homeManager";
+  lib = hmLib; # home-manager's extended lib (built from the `nixpkgs` input)
+
+  # no base modules of its own: its module system lives in the home-manager repo
+  baseModules = [ ];
+
+  # home-manager declares `lib`, `assertions` & `warnings` itself
+  declareLibOption = false;
+  declareAssertWarnOptions = false;
+
+  # reuse home-manager's module system instead of plain `evalModules`.
+  # `pkgs` comes from the eval args, so the kit stays system-agnostic:
+  # one kit serves every system, each `eval` call passes `pkgs`.
+  customEval = args@{ lib, pkgs, class, modules, ... }:
+    lib.evalModules (/* … uses pkgs, hmModules, modulesPath … */);
+
+  # expose home-manager's activation package flat on the Kit Config
+  exportedToplevelFields = { config, ... }: {
+    inherit (config.home) activationPackage;
+  };
+}
+```
+
+Its flake also builds the resulting home: `nix build ./examples#example-home`.
+The kit itself is system-agnostic (it defers `pkgs` to `eval`), so the flake exposes `kits.homekit` once, not per system.
+
+`customEval` must return the raw `evalModules` result, or at least expose `config`, `options` and `extendModules`.
+`exportedToplevelFields` receives that same raw result and returns the fields to add.
+kitsys re-derives them on every evaluation, including each `extendWith`, so they survive chaining, and it throws if a returned name collides with a top-level option or with `extendWith`.
+
 ## How it works
 
-Each `mykit.eval args` call runs `lib.evalModules` over this module list, in order:
+Each `mykit.eval args` call runs the kit's `customEval` — `lib.evalModules` by default — over this module list, in order:
 1. the injected kitsys base modules
 2. the **Kit** definition's `baseModules`
 3. the caller's `configModule` & `moreModules`
@@ -212,9 +261,10 @@ Each `mykit.eval args` call runs `lib.evalModules` over this module list, in ord
 A **Kit** injects these base modules by default:
 - the `lib` option
 - the `assertions` and `warnings` options
-- the `lib.extendWith` function (for after-eval config refinement)
 
-`myConfig.lib.extendWith module` calls `prevEval.extendModules` on the recorded evaluation, bumping `_kitState.nestingLevel` and exposing the previous config to the added module as `prevConfig`.
+Every **Kit Config** also carries `extendWith`, attached as a plain attribute rather than an option, so it never clashes with a kit's own options or their types (such as a strictly-typed `lib`).
+
+`myConfig.extendWith module` calls `prevEval.extendModules` on the recorded evaluation, bumping `_kitState.nestingLevel` and exposing the previous config to the added module as `prevConfig`.
 
 > [!NOTE]
 > Fun fact: I originally built the `extendWith` mechanism myself, before knowing that `evalModules` results can already be extended through `extendModules` 😅.
@@ -233,6 +283,9 @@ The flake exposes a single function: `lib.kitsys.newKit`.
 | `lib` | `null` | Kit-wide default `lib` for `eval`; a `lib` passed to `eval` takes priority. |
 | `declareLibOption` | `true` | Set `false` if `baseModules` declare `lib`. |
 | `declareAssertWarnOptions` | `true` | Set `false` if `baseModules` declare these options. |
+| `customEval` | wrapper over `lib.evalModules` | Replaces the `evalModules` call each `eval` runs, to reuse another module system. Must return a raw `evalModules` result, or at least expose `config`, `options` and `extendModules`. See [Defining complex **Kit**s](#defining-complex-kits). |
+| `exportedToplevelFields` | `_ : {}` | Function adding extra top-level fields to each **Kit Config**, derived from the eval result. See [Defining complex **Kit**s](#defining-complex-kits). |
+| `requirePkgs` | `false` | Set `true` for a kit whose modules need `pkgs`: `eval` then throws unless a `pkgs` is passed. |
 
 **Kit** (returned by `kitsys.newKit`):
 
@@ -245,19 +298,22 @@ The flake exposes a single function: `lib.kitsys.newKit`.
 
 | Arg | Default | Description |
 | --- | --- | --- |
-| `lib` | `newKit`'s `lib` | The `lib` the evaluation runs with (its `evalModules`, assertion/warning check, and option-default helpers). A value passed here takes priority over `newKit`'s `lib`. Required when `newKit` got no `lib`. |
+| `lib` | `newKit`'s `lib` | The `lib` the evaluation runs with (its `evalModules`, assertion/warning check, and option-default helpers). A value passed here takes priority over `newKit`'s `lib`; `pkgs.lib` is the last resort. Required when neither `pkgs` nor `newKit`'s `lib` is given. |
+| `pkgs` | `null` | System-specific `pkgs` for this evaluation. Forwarded to the kit's `customEval`; the default evaluator also injects it as `_module.args.pkgs`. Provides `lib` (as `pkgs.lib`) when no other `lib` is set. |
 | `configModule` | required | The module holding the option values to evaluate. |
 | `moreModules` | `[]` | Further modules appended after `configModule`. |
+| `specialArgs` | `{}` | Extra module args for the evaluation — the place for system-specific inputs such as `pkgs`. |
 
-Any other argument is forwarded to `evalModules`, which rejects arguments it does not know.
+Any other argument is forwarded to the kit's `customEval` (and from there to `evalModules`), which rejects arguments it does not know.
 
-**Kit Config** (returned by `mykit.eval` / `lib.extendWith`):
+**Kit Config** (returned by `mykit.eval` / `extendWith`):
 
 | Attr | Description |
 | --- | --- |
-| `lib.extendWith` | Extend the config with an extra module; returns a new config. |
+| `extendWith` | Extend the config with an extra module; returns a new config. |
 | `assertions` / `warnings` | Checked at every evaluation and extension. |
 
+Any extra top-level fields the kit's `exportedToplevelFields` returns (such as `activationPackage`) are present too.
 A `_kitState` attrset is also present, holding the kit's internal evaluation state.
 
 ## Development

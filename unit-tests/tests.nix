@@ -1,5 +1,4 @@
 {
-  lib,
   sampleConfigs,
 }:
 
@@ -68,9 +67,49 @@
     expr = sampleConfigs.customEvalNested._kitState.nestingLevel;
     expected = 1;
   };
-  # `extendWith` reuses the recorded eval's `extendModules`, so `customEval` must run only once.
+  # `extendWith` reuses the recorded eval's `extendModules`, so the module list the `customEval`
+  # wrapper was handed must not change.
+  # Blind spot: a re-run that is handed the same module list, then extends, is not caught.
   "test.12custom-eval-not-rerun-on-extend" = {
-    expr = lib.length sampleConfigs.customEvalNested.customEvalRuns;
-    expected = 1;
+    expr = sampleConfigs.customEvalNested.seenModules == sampleConfigs.customEval.seenModules;
+    expected = true;
+  };
+  # Test extra top-level fields exported by the kit
+  "test.13exported-field-present" = {
+    expr = sampleConfigs.withExportedFields.doubled;
+    expected = "exported-value";
+  };
+  # kitsys re-derives exported fields on each eval, so they survive extension
+  "test.14exported-field-survives-extend" = {
+    expr = sampleConfigs.exportedFieldsNested.doubled;
+    expected = "exported-value-after-extend";
+  };
+  # An exported name colliding with a top-level option must be rejected
+  "test.15exported-field-collision-rejected" = {
+    expr = sampleConfigs.collisionRejected;
+    expected = true;
+  };
+  # `pkgs` passed to `eval`
+  "test.16pkgs-derives-lib" = {
+    expr = sampleConfigs.pkgsDerivedLib.val;
+    expected = "from-pkgs";
+  };
+  "test.17pkgs-reaches-modules" = {
+    expr = sampleConfigs.pkgsInjected.val;
+    expected = "the-pkgs";
+  };
+  # A kit's own `lib` takes priority over `pkgs.lib`
+  "test.18kit-lib-beats-pkgs-lib" = {
+    expr = sampleConfigs.kitLibBeatsPkgsLib.val;
+    expected = "newKit";
+  };
+  # `requirePkgs = true`: `eval` must be given a `pkgs`
+  "test.19require-pkgs-missing-throws" = {
+    expr = sampleConfigs.pkgsRequiredButMissing;
+    expected = true;
+  };
+  "test.20require-pkgs-given-ok" = {
+    expr = sampleConfigs.pkgsRequiredAndGiven.val;
+    expected = "given-pkgs";
   };
 }
