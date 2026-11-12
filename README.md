@@ -5,10 +5,13 @@ You define a **Kit** — a module system for one use-case — and evaluate **Kit
 This flake exposes `kitsys`, a small Nix library that turns `lib.evalModules` into a *nestable* config module system.
 
 > [!NOTE]
-> This flake was extracted from my [dotfiles](https://github.com/bew/dotfiles) repo, where it backs my _toolkit_ module systems for nvim, zsh, tmux, …
->
-> The core was written by hand, over a long period of design & thinking.
-> The extraction as a flake, and the API rework since then, were AI-assisted.
+> This flake was extracted from my [dotfiles] repo at ([bew/dotfiles#68d297fad](https://github.com/bew/dotfiles/commit/68d297fad3f78a5ab7807a5939b081d6a5f9a692)), where it backs my _toolkit_ module systems for nvim, zsh, tmux, …
+
+> [!NOTE]
+> The initial implementation was entirely written by hand.
+> The extraction as a flake from my [dotfiles] repo, and the API rework since then, were AI-assisted.
+
+[dotfiles]: https://github.com/bew/dotfiles
 
 ## Motivation
 
@@ -17,7 +20,7 @@ The **Kit** system was driven by these goals:
   `kitsys` supplies that scaffolding, so a kit only declares what is specific to it.
 - **A standard way to create & share module systems**: a kit is a named, class-constrained module system with a stable eval entry point, so a module system defined once can be exposed as a flake output (`kits.<name>`) and consumed by other flakes.
 - **Easy way to extend/refine a config after evaluation**: a **Kit Config** carries `extendWith`, which re-evaluates the same kit with an extra module and returns a new config.
-  These extensions can chain, and the extra module can read the config values from before the extension through the `prevConfig` module arg.
+  These extensions can chain, and the extra module can read the config values from the previous eval through the `prevConfig` module arg.
 
 ## Concepts
 
@@ -63,14 +66,13 @@ myConfig = mykit.eval {
   configModule = ./path/to/your/bew-config.mykit-module.nix;
   # or in attrset form:
   # configModule = { /* your option values */ };
-
 };
 ```
 
 **3. Extend an evaluated kit config** when needed:
 ```nix
 myCustomConfig = myConfig.extendWith ({ lib, prevConfig, ... }: {
-  /* override or add options; `prevConfig` holds the config values from before _this_ extension */
+  /* override or add options; `prevConfig` holds the config values from the previous eval */
 });
 ```
 

@@ -39,8 +39,12 @@
 
       # The example home, buildable via `nix build ./examples#example-home`.
       packages = forAllSystems (pkgs: {
-        example-home =
-          (homekit.eval { inherit pkgs; configModule = import ./example-config.homekit-module.nix; }).activationPackage;
+        example-home = let
+          homeConfig = homekit.eval {
+            inherit pkgs;
+            configModule = ./example-config.homekit-module.nix;
+          };
+        in homeConfig.activationPackage;
       });
     };
 }
