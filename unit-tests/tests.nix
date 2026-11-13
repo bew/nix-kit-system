@@ -112,4 +112,17 @@
     expr = sampleConfigs.pkgsRequiredAndGiven.val;
     expected = "given-pkgs";
   };
+  # `disableExtensionSupport = true`: eval works, `extendWith` throws, no `_kitState`
+  "test.21no-extension-config-ok" = {
+    expr = sampleConfigs.noExtensionConfig.val;
+    expected = "no-extension";
+  };
+  "test.22no-extension-extend-throws" = {
+    expr = sampleConfigs.noExtensionExtendThrows;
+    expected = true;
+  };
+  "test.23no-extension-has-no-kit-state" = {
+    expr = sampleConfigs.noExtensionHasNoKitState;
+    expected = true;
+  };
 }

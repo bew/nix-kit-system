@@ -154,6 +154,24 @@ let
     configModule = { val = "given-pkgs"; };
   };
 
+  # A kit with extension support disabled: `extendWith` throws, no `_kitState` option.
+  minikitNoExtension = kitsys.newKit (minikitDefArgs // {
+    disableExtensionSupport = true;
+  });
+
+  noExtensionConfig = minikitNoExtension.eval {
+    inherit lib;
+    configModule = { val = "no-extension"; };
+  };
+
+  # `extendWith` on it must throw.
+  noExtensionExtendThrows = let
+    result = builtins.tryEval (noExtensionConfig.extendWith {});
+  in !result.success;
+
+  # No `_kitState` option is injected.
+  noExtensionHasNoKitState = !(noExtensionConfig ? _kitState);
+
   # The eval results under test, grouped for `tests.nix`.
   sampleConfigs = {
     inherit init nested nestedAgain withWarn;
@@ -163,6 +181,7 @@ let
     inherit collisionRejected;
     inherit pkgsDerivedLib pkgsInjected kitLibBeatsPkgsLib;
     inherit pkgsRequiredButMissing pkgsRequiredAndGiven;
+    inherit noExtensionConfig noExtensionExtendThrows noExtensionHasNoKitState;
   };
 
   tests = import ./tests.nix {

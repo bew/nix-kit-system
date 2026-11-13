@@ -111,6 +111,10 @@ in {
     # Use it so the missing `pkgs` is reported early, instead of failing deep in the stack.
     requirePkgs ? false,
 
+    # When `true`, disable extension support: `extendWith` throws when called, and no `_kitState`
+    # option is injected. Use it for a kit where extending a config makes no sense.
+    disableExtensionSupport ? false,
+
     # Replaces the `lib.evalModules` call each `eval` would otherwise run, e.g. to wrap it with a
     # use-case-specific evaluator (such as home-manager's).
     #
@@ -144,6 +148,7 @@ in {
     exportedToplevelFields ? (_: {}),
   }:
   let
+    kitName = meta.name or "unnamed";
     kitLib = lib; # Captured before `eval`'s own `lib` arg shadows it
 
     # The `lib` given to `eval` wins, then the kit-wide `lib`, then `pkgs.lib` (when `pkgs!=null`).
@@ -161,7 +166,7 @@ in {
     kitsysBaseModules = [
       (if declareLibOption then declareLibOptionModule else {})
       (if declareAssertWarnOptions then declareAssertWarnOptionsModule else {})
-      declareConfigExtensionHelperModule
+      (if !disableExtensionSupport then declareConfigExtensionHelperModule else {})
     ];
 
     eval = {
@@ -194,7 +199,7 @@ in {
       checkRequiredPkgs = result: (
         # Fail early when the kit declares it needs `pkgs` and the caller did not pass one.
         if requirePkgs && pkgs == null
-        then throw ''kitsys.eval: kit "${meta.name or "unnamed"}" requires `pkgs`; pass it to `eval` call''
+        then throw ''kitsys.eval: kit "${kitName}" requires `pkgs`; pass it to `eval` call''
         else result
       );
 
@@ -206,9 +211,10 @@ in {
             ++ baseModules
             ++ [ configModule ]
             ++ moreModules
-            ++ [
+            ++ lib.optionals (!disableExtensionSupport) [
               # Initialize the state with the current eval, using option-default priority to ensure
               # all _kitState options have the same priority.
+              # (skipped when extension support is disabled, since `_kitState` is not declared then)
               { _kitState.currentEval = lib.mkOptionDefault evaluated; }
             ]
           );
@@ -219,10 +225,6 @@ in {
       # attach the extension helper so that extensions can chain.
       toKitConfig = rawEval: let
         rawKitConfig = checkAssertsAndWarnings lib rawEval.config;
-        prev_kitState = rawKitConfig._kitState;
-        # NOTE: We need a higher priority (less is more) for the options set below, to make sure
-        # that 2+ nesting evals won't have conflicting option definitions when overriding values.
-        higherPrio = rawEval.options._kitState.nestingLevel.highestPrio - 1;
 
         exportedFields = exportedToplevelFields rawEval;
 
@@ -242,7 +244,12 @@ in {
 
         # Extend the current Kit Config with the given module, returning a new Kit Config.
         # An extension module can read the pre-extension config through the `prevConfig` module arg.
-        extendWith = module: let
+        extendWith_impl = module: let
+          prev_kitState = rawKitConfig._kitState;
+          # NOTE: We need a higher priority (less is more) for the options set below, to make sure
+          # that 2+ nesting evals won't have conflicting option definitions when overriding values.
+          higherPrio = rawEval.options._kitState.nestingLevel.highestPrio - 1;
+
           extendedEval = rawEval.extendModules {
             modules = [
               module
@@ -262,6 +269,14 @@ in {
             ];
           };
         in toKitConfig extendedEval;
+
+        # Extension support disabled: `extendWith` stays present (so it never clashes with a kit's
+        # own options) but throws when called.
+        extendWith_disabled = _: (
+          throw ''kitsys: kit "${kitName}" has extension support disabled (disableExtensionSupport = true)''
+        );
+
+        extendWith = if !disableExtensionSupport then extendWith_impl else extendWith_disabled;
 
         # The final attrset representing the kit config 🚀
         finalKitConfig = (

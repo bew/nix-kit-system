@@ -264,10 +264,13 @@ Each `mykit.eval args` call runs the kit's `customEval` — `lib.evalModules` by
 A **Kit** injects these base modules by default:
 - the `lib` option
 - the `assertions` and `warnings` options
+- the `_kitState` option (unless `disableExtensionSupport = true`)
 
 Every **Kit Config** also carries `extendWith`, attached as a plain attribute rather than an option, so it never clashes with a kit's own options or their types (such as a strictly-typed `lib`).
 
 `myConfig.extendWith module` calls `prevEval.extendModules` on the recorded evaluation, bumping `_kitState.nestingLevel` and exposing the previous config to the added module as `prevConfig`.
+
+With `disableExtensionSupport = true`, `extendWith` throws a clear error.
 
 > [!NOTE]
 > Fun fact: I originally built the `extendWith` mechanism myself, before knowing that `evalModules` results can already be extended through `extendModules` 😅.
@@ -289,6 +292,7 @@ The flake exposes a single function: `lib.kitsys.newKit`.
 | `customEval` | wrapper over `lib.evalModules` | Replaces the `evalModules` call each `eval` runs, to reuse another module system. Must return a raw `evalModules` result, or at least expose `config`, `options` and `extendModules`. See [Defining complex **Kit**s](#defining-complex-kits). |
 | `exportedToplevelFields` | `_ : {}` | Function adding extra top-level fields to each **Kit Config**, derived from the eval result. See [Defining complex **Kit**s](#defining-complex-kits). |
 | `requirePkgs` | `false` | Set `true` for a kit whose modules need `pkgs`: `eval` then throws unless a `pkgs` is passed. |
+| `disableExtensionSupport` | `false` | Set `true` for a kit where extending doesn't make sense |
 
 **Kit** (returned by `kitsys.newKit`):
 
