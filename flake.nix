@@ -16,5 +16,25 @@
         kit-system = self;
       }
     );
+
+    # A sample kit for NixOS
+    # (https://github.com/NixOS/nixpkgs)
+    sampleKits.nixoskit = (
+      { nixpkgs }:
+      import ./sampleKits/nixoskit.nix {
+        inherit nixpkgs;
+        kit-system = self;
+      }
+    );
+
+    # A sample kit for nixvim
+    # (https://github.com/nix-community/nixvim)
+    sampleKits.nixvimkit = (
+      { nixpkgs, nixvim }:
+      import ./sampleKits/nixvimkit.nix {
+        inherit nixpkgs nixvim;
+        kit-system = self;
+      }
+    );
   };
 }

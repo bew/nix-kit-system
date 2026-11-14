@@ -1,10 +1,12 @@
-# Example Kit: a home-manager-based module system.
+# Example Kit: a HM-based module system.
 #
 # It reuses HM's own modules as its module system, by replacing kitsys's plain
 # `evalModules` call with HM's module set through `customEval`.
 # (the same thing `home-manager.lib.homeManagerConfiguration` does internally)
 
 { nixpkgs, home-manager, kit-system }:
+# (required inputs)
+
 let
   kitsys = kit-system.lib.kitsys;
 
@@ -16,8 +18,8 @@ let
 in
 kitsys.newKit {
   meta.name = "Example home kit (home-manager based)";
-
   class = "homeManager";
+
   lib = hmLib;
 
   # This kit has no base modules of its own: the module system it builds on is
@@ -25,8 +27,7 @@ kitsys.newKit {
   # They are injected through `customEval` below (see `hmModules`).
   baseModules = [ ];
 
-  # home-manager declares the `lib` & nixpkgs' `assertions`/`warnings` options itself
-  # → so kitsys must not declare them again.
+  # HM declares `lib`/`assertions`/`warnings` options itself, so kitsys must not declare them again.
   declareLibOption = false;
   declareAssertWarnOptions = false;
 
