@@ -4,9 +4,9 @@
 # `evalModules` call with HM's module set through `customEval`.
 # (the same thing `home-manager.lib.homeManagerConfiguration` does internally)
 
-{ nixpkgs, home-manager, nix-kit-system }:
+{ nixpkgs, home-manager, kit-system }:
 let
-  kitsys = nix-kit-system.lib.kitsys;
+  kitsys = kit-system.lib.kitsys;
 
   # HM's extended lib (nixpkgs' lib plus its own additions).
   # note: HM's modules expect this as their `lib` module arg, so the kit evaluates with it.
@@ -41,7 +41,7 @@ kitsys.newKit {
   #
   # `pkgs` is taken from the eval args (the caller of `eval` supplies it), so the kit itself stays
   # system-agnostic: one kit instance serves every system.
-  customEval =
+  customEval = (
     args@{ lib, pkgs, class, modules, ... }:
     let
       # HM's modules, assembled from the `pkgs` this eval runs with.
@@ -50,9 +50,7 @@ kitsys.newKit {
       };
     in
     lib.evalModules (
-      # `pkgs` is consumed here, so it must not reach `evalModules` (which rejects unknown args).
-      (builtins.removeAttrs args [ "lib" "pkgs" "modules" ])
-      // {
+      (builtins.removeAttrs args [ "lib" "pkgs" "modules" ]) // {
         inherit class;
         modules = modules ++ hmModules;
         specialArgs = (
@@ -64,5 +62,6 @@ kitsys.newKit {
           // (args.specialArgs or { })
         );
       }
-    );
+    )
+  );
 }

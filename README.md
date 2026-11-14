@@ -1,8 +1,10 @@
 # Nix Kit System - Define extensible Nix module systems for specific use-cases
 
-You define a **Kit** — a module system for one use-case — and evaluate **Kit modules** into a **Kit Config**.
+Nix modules sytems as first-class citizen! 🚀
 
-This flake exposes `kitsys`, a small Nix library that turns `lib.evalModules` into a *nestable* config module system.
+You define a **Kit**, and evaluate **Kit modules** into a **Kit Config**.
+
+This flake exposes `kitsys`, a thin wrapper around `lib.evalModules` to give it a name, metadata, and help standardize its uses.
 
 > [!NOTE]
 > This flake was extracted from my [dotfiles] repo at ([bew/dotfiles#68d297fad](https://github.com/bew/dotfiles/commit/68d297fad3f78a5ab7807a5939b081d6a5f9a692)), where it backs my _toolkit_ module systems for nvim, zsh, tmux, …
@@ -30,7 +32,8 @@ It adds the kit's name and metadata, makes the module system easy to share, and 
 
 A **Kit Config** is the result of evaluating a **Kit**: it holds the resolved option values, and can be refined/extended afterwards.
 
-A **Kit module** is a [_Nix module_][nix-module-system] written for a **Kit**.
+A **Kit module** is basically a [_Nix module_][nix-module-system], with the same `class` (or none) as a specific **Kit**.
+For example any NixOS module that have `class = "nixos"` (or none) can be a **Kit module** for the NixOS **Kit**.
 
 A **Kit** should stay system-agnostic: its definition must not depend on any particular system, so the same kit instance can be shared everywhere it is exposed.
 Anything system-specific — typically `pkgs` — belongs to an evaluation: pass it to `eval` as `pkgs`, never bake it into the kit's `baseModules`.
@@ -77,11 +80,12 @@ myCustomConfig = myConfig.extendWith ({ lib, prevConfig, ... }: {
 });
 ```
 
-## Exposing **Kit**s & **Kit config**s on your flake
+## Exposing Kits & Kit configs on your flake
 
 A flake that defines a **Kit**, or evaluates a **Kit Config**, can expose them for other flakes to consume:
-- `kits.<name>` — a built **Kit**, ready to `eval`.
-- `kitConfigs.<name>` — an evaluated **Kit Config**, ready to use.
+- `kits.<kitName>` — a built **Kit**, ready to `eval`.
+- `kitConfigs.<kitName>.<configName>` — an evaluated **Kit Config**, ready to use (usually system-specific).
+  It can also be a function taking `{system, ...}:` as input, to make a **Kit Config** system-agnostic.
 
 A **Kit** being system-agnostic means it is exposed once, not under `forAllSystems`.
 Only the **Kit Config**s that need `pkgs` are per-system, since it is their `eval` call that supplies it.
@@ -99,15 +103,45 @@ Only the **Kit Config**s that need `pkgs` are per-system, since it is their `eva
   in {
     kits = { inherit mykit; };
 
-    kitConfigs."mykit-bew" = mykit.eval {
+    kitConfigs.mykit.bew = mykit.eval {
       lib = nixpkgs.lib;
+      configModule = ./bew-config.mykit-module.nix;
+    };
+
+    # Example system-agnostic Kit Config
+    kitConfigs.mykit.minimal = {system, ...}: mykit.eval {
+      pkgs = nixpkgs.legacyPackages.${system};
       configModule = ./bew-config.mykit-module.nix;
     };
   };
 }
 ```
 
-## Writing **Kit modules**
+> [!NOTE]
+> The system-agnostic form is a `{system, ...}: …` instead of `system: …` to potentially support
+> more arguments in the future without breaking the interface.
+> (or make it easily configurable by requiring other args, …)
+
+### Sample Kits
+
+This flake also ships sample **Kit**s, exposed as `sampleKits.<name>`.
+They are here as examples, not officially supported 😉.
+
+A sample **Kit** is not ready to use: this flake deliberately keeps `nixpkgs`, `home-manager` or other dependencies out of its own inputs to really stay dependency-free, so `sampleKits.<name>` is a function you call with those inputs to get an actual **Kit** back in your flake / Nix expression:
+```nix
+outputs = { kit-system, nixpkgs, home-manager, ... }: let
+  # Fill in the dependencies of the sample kit
+  homekit = kit-system.sampleKits.homekit { inherit nixpkgs home-manager; };
+in {
+  # Use `homekit` how you want here 🤷
+  kitConfigs.homekit.myHome = homekit.eval {
+    inherit pkgs;
+    configModule = ./my-config.homekit-module.nix;
+  };
+};
+```
+
+## Writing Kit modules
 
 A **Kit** is normally paired with several kinds of **Kit modules**:
 - its _base module_, which declares the kit's options and base configs
@@ -115,7 +149,7 @@ A **Kit** is normally paired with several kinds of **Kit modules**:
 - _config modules_, the toplevel entrypoint for a **Kit** evaluation, yielding a **Kit Config**.
 - any other _module_ written for that kit
 
-All of them are ordinary [Nix modules][nix-module-system]: they may `imports` further modules, declare options, set values, and they all receive the module args the **Kit** injects.
+All of them are ordinary [Nix modules][nix-module-system]: they may import further modules, declare options, set values, and they all receive the module args the **Kit** injects.
 
 A **Kit module** may declare its _nominal module class_ with a top-level `_class = "<class>";`.
 When the **Kit** definition sets `class`, `evalModules` rejects a module whose `_class` differs.
@@ -214,14 +248,15 @@ Example _module_:
 }
 ```
 
-## Defining complex **Kit**s
+## Defining complex Kits
 
-A kit may need more than the default `lib.evalModules` setup, and `newKit` args cover that:
+A kit may need more than the default `lib.evalModules` setup, and these `newKit` args cover that:
 - `customEval` replaces the `evalModules` call each `eval` runs — e.g. to reuse home-manager's module system.
-- `exportedToplevelFields` adds extra top-level fields to each **Kit Config**, derived from the evaluated config.
+- `exportedToplevelFields` adds extra top-level fields to each **Kit Config**, potentially derived from the evaluated config.
 
-The [`examples/`](examples/) directory holds a complete home-manager-based kit, across [`examples/homekit.nix`](examples/homekit.nix) and its [`examples/flake.nix`](examples/flake.nix):
+For reference, the [`examples/`](./examples/) flake builds a complete home package based on a **Kit** wrapping `home-manager`'s modules (defined in [`sampleKits/homekit.nix`](./sampleKits/homekit.nix)).
 
+Here is how home-manager could define a **Kit** for its module system:
 ```nix
 kitsys.newKit {
   class = "homeManager";
@@ -234,20 +269,21 @@ kitsys.newKit {
   declareLibOption = false;
   declareAssertWarnOptions = false;
 
-  # reuse home-manager's module system instead of plain `evalModules`.
+  # Reuse home-manager's module system instead of plain `evalModules`.
   # `pkgs` comes from the eval args, so the kit stays system-agnostic:
   # one kit serves every system, each `eval` call passes `pkgs`.
   customEval = args@{ lib, pkgs, class, modules, ... }:
-    lib.evalModules (/* … uses pkgs, hmModules, modulesPath … */);
+    lib.evalModules (/* … uses pkgs, hmModules, sets modulesPath … */);
 
-  # expose home-manager's activation package flat on the Kit Config
+  # Expose home-manager's activation package on the Kit Config result
+  # (the function gets the exact result of `customEval` above)
   exportedToplevelFields = { config, ... }: {
     inherit (config.home) activationPackage;
   };
 }
 ```
 
-Its flake also builds the resulting home: `nix build ./examples#example-home`.
+Its flake also builds the resulting home: `nix build ./examples#kitConfigs.homekit.example-home.activationPackage`.
 The kit itself is system-agnostic (it defers `pkgs` to `eval`), so the flake exposes `kits.homekit` once, not per system.
 
 `customEval` must return the raw `evalModules` result, or at least expose `config`, `options` and `extendModules`.
@@ -317,11 +353,11 @@ Any other argument is forwarded to the kit's `customEval` (and from there to `ev
 
 | Attr | Description |
 | --- | --- |
-| `extendWith` | Extend the config with an extra module; returns a new config. |
+| `extendWith` | Extend the config with an extra module; returns a new config. Throws if the kit has `disableExtensionSupport = true`. |
 | `assertions` / `warnings` | Checked at every evaluation and extension. |
 
 Any extra top-level fields the kit's `exportedToplevelFields` returns (such as `activationPackage`) are present too.
-A `_kitState` attrset is also present, holding the kit's internal evaluation state.
+A `_kitState` attrset is also present, holding the kit's internal evaluation state; absent with `disableExtensionSupport = true`.
 
 ## Development
 

@@ -6,4 +6,4 @@ _default:
 # Run the test suite
 test:
 	nix eval -f unit-tests/runner.nix
-	nix eval ./examples#tests.{{ nix_system }}
+	nix eval ./examples#integration-tests.{{ nix_system }}

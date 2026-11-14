@@ -1,5 +1,5 @@
 {
-  description = "Example kits built with nix-kit-system";
+  description = "Example kits built with kit-system";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -7,44 +7,44 @@
       url = "github:nix-community/home-manager";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    nix-kit-system.url = "path:..";
+    kit-system.url = "path:..";
   };
 
-  outputs =
-    {
-      self,
-      nixpkgs,
-      home-manager,
-      nix-kit-system,
-    }:
+  outputs = inputs@{ nixpkgs, kit-system, ... }: (
     let
-      systems = [
-        "aarch64-darwin"
-        "aarch64-linux"
-        "x86_64-linux"
-      ];
-      forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f nixpkgs.legacyPackages.${system});
+      systems = [ "aarch64-darwin" "x86_64-linux" ];
+      forAllSystems = nixpkgs.lib.genAttrs systems;
+      pkgsForSys = system: nixpkgs.legacyPackages.${system};
 
-      # One system-agnostic kit instance: `pkgs` is deferred to each `eval` call.
-      homekit = import ./homekit.nix { inherit nixpkgs home-manager nix-kit-system; };
-    in
-    {
-      # Example Kit: a home-manager-based module system.
-      # Not per-system: the kit takes `pkgs` at eval time.
+      # The example kit configs are evaluated for one concrete system, so their exported
+      # packages (e.g. `activationPackage`) are directly `nix build`-able.
+      exampleSystem = "x86_64-linux";
+
+      homekit = kit-system.sampleKits.homekit {
+        inherit nixpkgs;
+        inherit (inputs) home-manager;
+      };
+
+      # TODO: add more sample kits!
+    in {
+      integration-tests = forAllSystems (system: import ./test.nix {
+        inherit homekit;
+        pkgs = pkgsForSys system;
+      });
+
+      # == Example Kits:
       kits.homekit = homekit;
 
-      # Runnable example test, kept out of `checks.*` on purpose.
-      # `just test` (in the repo root) runs it after the unit tests.
-      tests = forAllSystems (pkgs: import ./test.nix { inherit pkgs homekit; });
+      # == Example Kit Configs:
 
-      # The example home, buildable via `nix build ./examples#example-home`.
-      packages = forAllSystems (pkgs: {
-        example-home = let
-          homeConfig = homekit.eval {
-            inherit pkgs;
-            configModule = ./example-config.homekit-module.nix;
-          };
-        in homeConfig.activationPackage;
-      });
-    };
+      # An example homekit config.
+      # Build it with `nix build ./examples#kitConfigs.homekit.example-home.activationPackage`
+      kitConfigs.homekit.example-home = (
+        homekit.eval {
+          pkgs = pkgsForSys exampleSystem;
+          configModule = ./example-config.homekit-module.nix;
+        }
+      );
+    }
+  );
 }

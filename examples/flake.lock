@@ -20,7 +20,7 @@
         "type": "github"
       }
     },
-    "nix-kit-system": {
+    "kit-system": {
       "locked": {
         "path": "..",
         "type": "path"
@@ -50,7 +50,7 @@
     "root": {
       "inputs": {
         "home-manager": "home-manager",
-        "nix-kit-system": "nix-kit-system",
+        "kit-system": "kit-system",
         "nixpkgs": "nixpkgs"
       }
     }

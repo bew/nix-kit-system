@@ -1,6 +1,6 @@
 # Runnable example test for the home-manager-based kit.
 #
-# Reached through the flake's `tests.<system>` output; `just test` (in the repo root) runs it
+# Reached through the flake's `integration-tests.<system>` output; `just test` (in the repo root) runs it
 # after the unit tests.
 # It throws on failure so the recipe actually fails.
 # The kit is system-agnostic, so `pkgs` is supplied per eval here.
